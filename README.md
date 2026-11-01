@@ -16,7 +16,6 @@ npm test        # headless Chromium smoke test
 
 ## Credits
 Made by Emanuele Esposito ([Emanuele Tech](https://www.instagram.com/emanuele_tech)).
-Developed with the help of AI coding tools (Claude by Anthropic).
 
 ## License
 MIT
