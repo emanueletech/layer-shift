@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.svg" alt="LAYER SHIFT: night shift at the print farm" width="100%" />
+  <img src="docs/banner-print.svg" alt="LAYER SHIFT: night shift at the print farm" width="100%" />
 </p>
 
 <p align="center">
