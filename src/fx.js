@@ -26,7 +26,7 @@ export function glitch(scene, strength = 6) {
   if (!webgl(scene)) return;
   const fx = scene.cameras.main.postFX.addPixelate(-1);
   scene.tweens.addCounter({
-    from: strength, to: -1, duration: 260, ease: 'Quad.easeOut',
+    from: strength, to: -1, duration: 160, ease: 'Quad.easeOut',
     onUpdate: (tw) => { fx.amount = Math.round(tw.getValue()); },
     onComplete: () => scene.cameras.main.postFX.remove(fx),
   });

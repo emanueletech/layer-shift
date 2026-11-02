@@ -445,8 +445,8 @@ export default class GameScene extends Phaser.Scene {
     this.stats.jolts = (this.stats.jolts || 0) + 1;
     this.timeLeft = Math.min(this.level.layerTime, this.timeLeft + JOLT_BONUS);
     SFX.jolt();
-    shake(this, 0.014, 240);
-    glitch(this, 6);
+    // a light jolt only: a strong camera shake plus pixelate read like the page zooming while you play
+    shake(this, 0.003, 120);
     this.flashLed(C.amber);
     floatText(this, PX, BED_Y - 26, `PLATE SHIFT ${k < 0 ? '⟵' : '⟶'}`, hex(C.amber));
     // the notice takes the hint's place on the blueprint for a moment
@@ -537,7 +537,7 @@ export default class GameScene extends Phaser.Scene {
       floatText(this, midX, y, droop ? 'SPAGHETTI!' : 'LAYER SHIFT!', hex(droop ? C.amber : C.red));
       shake(this, droop ? 0.008 : 0.004, 160);
       if (droop) SFX.spaghetti(); else SFX.error();
-      glitch(this, droop ? 5 : 8);
+      glitch(this, droop ? 3 : 4);
       this.flashLed(C.red);
     }
     this.updateStats();
