@@ -1,26 +1,17 @@
 import Phaser from 'phaser';
-import { resumeAudio, SFX } from './sfx.js';
+import { W, H, C } from './theme.js';
+import { makeTextures } from './textures.js';
+import TitleScene from './scenes/Title.js';
+import GameScene from './scenes/Game.js';
+import ResultsScene from './scenes/Results.js';
 
-export const W = 960;
-export const H = 540;
-
-// Placeholder scenes — the real game is designed once the jam theme is announced.
-class MenuScene extends Phaser.Scene {
-  constructor() { super('menu'); }
+class BootScene extends Phaser.Scene {
+  constructor() { super('boot'); }
   create() {
-    this.add.text(W / 2, H / 2 - 40, 'GAME OFF 2026', { fontFamily: 'monospace', fontSize: '48px', color: '#ffffff' }).setOrigin(0.5);
-    this.add.text(W / 2, H / 2 + 30, 'click / tap / space to start', { fontFamily: 'monospace', fontSize: '18px', color: '#9aa4b2' }).setOrigin(0.5);
-    const go = () => { resumeAudio(); SFX.click(); this.scene.start('game'); };
-    this.input.once('pointerdown', go);
-    this.input.keyboard.once('keydown-SPACE', go);
-  }
-}
-
-class GameScene extends Phaser.Scene {
-  constructor() { super('game'); }
-  create() {
-    this.add.text(W / 2, H / 2, 'game goes here', { fontFamily: 'monospace', fontSize: '24px', color: '#ffffff' }).setOrigin(0.5);
-    window.__gameState = { scene: 'game' };
+    makeTextures(this);
+    // Wait for the bundled fonts so the first texts are not drawn with a fallback face.
+    const ready = document.fonts ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]) : Promise.resolve();
+    ready.then(() => this.scene.start('title'));
   }
 }
 
@@ -29,10 +20,9 @@ const game = new Phaser.Game({
   parent: 'game',
   width: W,
   height: H,
-  backgroundColor: '#14161c',
-  pixelArt: true,
-  physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
+  backgroundColor: C.bg0,
+  antialias: true,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [MenuScene, GameScene],
+  scene: [BootScene, TitleScene, GameScene, ResultsScene],
 });
 window.__game = game;

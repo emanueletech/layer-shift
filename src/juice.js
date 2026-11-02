@@ -40,6 +40,6 @@ export function burst(scene, x, y, color = 0xffffff, count = 14, speed = 220) {
 }
 
 export function floatText(scene, x, y, text, color = '#ffffff') {
-  const t = scene.add.text(x, y, text, { fontFamily: 'monospace', fontSize: '18px', color, stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(1000);
+  const t = scene.add.text(x, y, text, { fontFamily: 'Poppins, Arial, sans-serif', fontStyle: '700', fontSize: '16px', color, stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(1000);
   scene.tweens.add({ targets: t, y: y - 40, alpha: 0, duration: 700, ease: 'Cubic.easeOut', onComplete: () => t.destroy() });
 }
