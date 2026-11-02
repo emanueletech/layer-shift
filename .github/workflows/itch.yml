@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
       ITCH_TARGET: ${{ vars.ITCH_TARGET || 'emanueletech/layer-shift' }}
@@ -27,12 +27,12 @@ jobs:
         id: key
         run: |
           if [ -z "$BUTLER_API_KEY" ]; then echo "BUTLER_API_KEY not set: skipping the itch.io upload"; echo "ok=false" >> "$GITHUB_OUTPUT"; else echo "ok=true" >> "$GITHUB_OUTPUT"; fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.key.outputs.ok == 'true'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.key.outputs.ok == 'true'
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - if: steps.key.outputs.ok == 'true'
         run: npm ci && npm run build && node test/levels.mjs
