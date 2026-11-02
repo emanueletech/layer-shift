@@ -2,8 +2,7 @@ import Phaser from 'phaser';
 import { W, H, C, txt, hex } from '../theme.js';
 import { COLS, LEVELS } from '../levels.js';
 import { tone, SFX } from '../sfx.js';
-import { cameraLook, confetti, muteToggle } from '../fx.js';
-import { burst } from '../juice.js';
+import { cameraLook, muteToggle } from '../fx.js';
 import { layerShiftLogo } from './Title.js';
 
 const starsFor = (acc) => (acc >= 0.95 ? 3 : acc >= 0.8 ? 2 : acc >= 0.6 ? 1 : 0);
@@ -69,7 +68,7 @@ export default class ResultsScene extends Phaser.Scene {
       const s = txt(this, cx - 70 + i * 70, 178, '★', 56, on ? C.amber : 0x2a3446, { ox: 0.5, oy: 0.5 }).setScale(0);
       this.tweens.add({
         targets: s, scale: 1, delay: 400 + i * 260, duration: 260, ease: 'Back.easeOut',
-        onStart: () => { if (on) { SFX.star(i); burst(this, s.x, s.y, C.amber, 14, 200); } },
+        onStart: () => { if (on) { SFX.star(i); const halo = this.add.image(s.x, s.y, 'glow').setTint(C.amber).setBlendMode('ADD').setScale(0.6).setAlpha(0.8); this.tweens.add({ targets: halo, scale: 2, alpha: 0, duration: 500, onComplete: () => halo.destroy() }); } },
       });
     }
 
@@ -121,7 +120,6 @@ export default class ResultsScene extends Phaser.Scene {
 
     this.cameras.main.fadeIn(300, 6, 8, 13);
     if (stars) this.time.delayedCall(300, () => SFX.win());
-    if (stars === 3) this.time.delayedCall(1250, () => { confetti(this, cx - 160, 200); confetti(this, cx + 160, 200); });
     cameraLook(this);
     muteToggle(this);
     window.__gameState = { scene: 'results', stars, accuracy: data.accuracy };

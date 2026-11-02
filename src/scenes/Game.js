@@ -4,7 +4,7 @@ import { COLS, LEVELS, layersOf } from '../levels.js';
 import { buildPrinter, PX, BED_Y, GRID_X0, rowY, colX } from '../printer.js';
 import { tone, SFX, Music, SONGS, resumeAudio } from '../sfx.js';
 import { dust, cameraLook, glitch, lightSweep, hotCell, afterimage, muteToggle } from '../fx.js';
-import { shake, burst, floatText } from '../juice.js';
+import { shake, floatText } from '../juice.js';
 
 const TOTAL_LAYERS = LEVELS.reduce((a, l) => a + l.rows.length, 0);
 export const CHORD_MS = 110;   // max gap between the two Shift presses that counts as "both"
@@ -47,6 +47,12 @@ export default class GameScene extends Phaser.Scene {
     dust(this, 160, 80, 340, 360);
     cameraLook(this);
     muteToggle(this);
+    this.buildPauseButton();
+    // pause by itself when the tab or window loses focus
+    const autoPause = () => this.pause();
+    this.game.events.on('blur', autoPause);
+    this.game.events.on('hidden', autoPause);
+    this.events.once('shutdown', () => { this.game.events.off('blur', autoPause); this.game.events.off('hidden', autoPause); });
     this.edgeGlow = this.add.image(W / 2, H / 2, 'glow').setDisplaySize(W * 1.6, H * 1.8).setTint(C.green).setBlendMode('ADD').setAlpha(0).setDepth(40);
     SFX.home();
     this.events.once('shutdown', () => this.music.stop());
@@ -129,6 +135,101 @@ export default class GameScene extends Phaser.Scene {
     txt(this, PX, 516, 'both = drop', 10, C.muted, { ox: 0.5, oy: 0.5, weight: '500' });
   }
 
+  // ---------- pause ----------
+  buildPauseButton() {
+    const b = this.add.container(W - 32, 48).setDepth(50);
+    const bg = this.add.graphics();
+    const draw = (hover) => {
+      bg.clear();
+      bg.fillStyle(hover ? 0x26324a : 0x1b2332, 1).fillRoundedRect(-16, -14, 32, 28, 7);
+      bg.lineStyle(1.5, hover ? C.greenGlow : 0x3a475c, 1).strokeRoundedRect(-16, -14, 32, 28, 7);
+      bg.fillStyle(C.text, 1).fillRoundedRect(-6, -7, 4, 14, 1).fillRoundedRect(2, -7, 4, 14, 1);
+    };
+    draw(false);
+    b.add(bg);
+    b.add(txt(this, -24, 0, 'PAUSE · P', 10, C.muted, { ox: 1, oy: 0.5, weight: '500', spacing: 1 }));
+    b.setSize(32, 28).setInteractive({ useHandCursor: true });
+    b.on('pointerover', () => draw(true));
+    b.on('pointerout', () => draw(false));
+    b.on('pointerdown', (p, lx, ly, e) => { e?.stopPropagation(); this.togglePause(); });
+  }
+
+  togglePause() { if (this.paused) this.resume(); else this.pause(); }
+
+  pause() {
+    if (this.paused || this.phase === 'done') return;
+    this.paused = true;
+    this.time.paused = true;
+    this.tweens.pauseAll();
+    this.music.stop();
+    SFX.click();
+    this.showPauseMenu();
+  }
+
+  resume() {
+    if (!this.paused) return;
+    this.paused = false;
+    this.time.paused = false;
+    this.tweens.resumeAll();
+    this.music.start();
+    this.lastDown = { left: -1e9, right: -1e9 };   // a key pressed in the menu must not start a chord
+    this.pauseMenu?.destroy();
+    this.pauseMenu = null;
+    SFX.click();
+  }
+
+  restart(level) {
+    this.time.paused = false;
+    this.tweens.resumeAll();
+    this.paused = false;
+    this.cameras.main.fadeOut(200, 6, 8, 13);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('game', { level }));
+  }
+
+  quit() {
+    this.time.paused = false;
+    this.tweens.resumeAll();
+    this.paused = false;
+    this.scene.start('title');
+  }
+
+  showPauseMenu() {
+    const m = this.add.container(0, 0).setDepth(100);
+    this.pauseMenu = m;
+    m.add(this.add.rectangle(W / 2, H / 2, W, H, 0x03050a, 0.72).setInteractive());   // swallow clicks
+    const pw = 340, ph = 330, x0 = W / 2 - pw / 2, y0 = H / 2 - ph / 2;
+    const g = this.add.graphics();
+    g.fillStyle(C.panel, 0.98).fillRoundedRect(x0, y0, pw, ph, 16);
+    g.lineStyle(1.5, C.panelEdge, 1).strokeRoundedRect(x0, y0, pw, ph, 16);
+    m.add(g);
+    m.add(txt(this, W / 2, y0 + 30, 'PAUSED', 30, C.white, { ox: 0.5, spacing: 4 }));
+    m.add(txt(this, W / 2, y0 + 70, `${this.level.name} · layer ${Math.min(this.r + 1, this.target.length)} / ${this.target.length}`, 12, C.muted, { ox: 0.5, weight: '500' }));
+    const items = [
+      ['RESUME', 'P / ESC', () => this.resume(), true],
+      ['RESTART THIS JOB', 'R', () => this.restart(this.levelIndex)],
+      ['RESTART THE NIGHT · 22:00', 'N', () => this.restart(0)],
+      ['QUIT TO TITLE', 'Q', () => this.quit()],
+    ];
+    items.forEach(([label, key, fn, primary], i) => {
+      const y = y0 + 118 + i * 50;
+      const b = this.add.container(W / 2, y);
+      const bg = this.add.graphics();
+      const draw = (hover) => {
+        bg.clear();
+        bg.fillStyle(primary ? (hover ? C.greenGlow : C.green) : (hover ? 0x26324a : 0x1b2332), 1).fillRoundedRect(-140, -19, 280, 38, 9);
+        bg.lineStyle(1.5, primary ? C.greenGlow : (hover ? C.greenGlow : 0x3a475c), 1).strokeRoundedRect(-140, -19, 280, 38, 9);
+      };
+      draw(false);
+      const col = primary ? 0x05200f : C.text;
+      b.add([bg, txt(this, -124, 0, label, 13, col, { oy: 0.5, spacing: 1 }), txt(this, 124, 0, key, 11, primary ? 0x05200f : C.muted, { ox: 1, oy: 0.5, mono: true })]);
+      b.setSize(280, 38).setInteractive({ useHandCursor: true });
+      b.on('pointerover', () => draw(true));
+      b.on('pointerout', () => draw(false));
+      b.on('pointerdown', (p, lx, ly, e) => { e?.stopPropagation(); fn(); });
+      m.add(b);
+    });
+  }
+
   // ---------- input ----------
   bindInput() {
     const kb = this.input.keyboard;
@@ -136,7 +237,10 @@ export default class GameScene extends Phaser.Scene {
       if (e.repeat) return;
       if (e.code === 'ShiftLeft' || e.code === 'ArrowLeft' || e.code === 'KeyA') this.press('left');
       else if (e.code === 'ShiftRight' || e.code === 'ArrowRight' || e.code === 'KeyD') this.press('right');
-      else if (e.code === 'Escape') this.scene.start('title');
+      else if (e.code === 'Escape' || e.code === 'KeyP') this.togglePause();
+      else if (this.paused && e.code === 'KeyR') this.restart(this.levelIndex);
+      else if (this.paused && e.code === 'KeyN') this.restart(0);
+      else if (this.paused && e.code === 'KeyQ') this.quit();
     });
     kb.on('keyup', (e) => {
       if (e.code === 'ShiftLeft' || e.code === 'ArrowLeft' || e.code === 'KeyA') this.release('left');
@@ -144,7 +248,7 @@ export default class GameScene extends Phaser.Scene {
     });
     this.input.addPointer(1);
     // touch: left half of the screen = left Shift, right half = right Shift, both at once = drop
-    this.input.on('pointerdown', (p) => { p.side = p.x < W / 2 ? 'left' : 'right'; this.press(p.side); });
+    this.input.on('pointerdown', (p) => { if (this.paused) return; p.side = p.x < W / 2 ? 'left' : 'right'; this.press(p.side); });
     this.input.on('pointerup', (p) => { if (p.side) this.release(p.side); });
   }
 
@@ -152,6 +256,7 @@ export default class GameScene extends Phaser.Scene {
   // state: macOS and Windows often skip the keyup of one Shift while the other is down, which left a
   // key stuck as held and turned the next single Shift into a drop.
   press(side) {
+    if (this.paused) return;
     resumeAudio();
     const now = this.time.now, other = side === 'left' ? 'right' : 'left';
     this.lastDown = this.lastDown || { left: -1e9, right: -1e9 };
@@ -224,7 +329,8 @@ export default class GameScene extends Phaser.Scene {
     const lostIdx = dir < 0 ? 0 : COLS - 1;
     if (this.current[lostIdx]) {
       this.stats.lost++;
-      burst(this, colX(lostIdx) + CW / 2, rowY(this.r) + CH / 2, C.red, 10, 160);
+      const gone = this.add.image(colX(lostIdx), rowY(this.r), 'cellBad').setOrigin(0).setAlpha(0.9);
+      this.tweens.add({ targets: gone, x: gone.x + (dir < 0 ? -30 : 30), alpha: 0, duration: 260, onComplete: () => gone.destroy() });
       SFX.lost();
     }
     this.current = dir < 0 ? [...this.current.slice(1), false] : [false, ...this.current.slice(0, -1)];
@@ -240,6 +346,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   update(_, dtMs) {
+    if (this.paused) return;
     if (this.phase === 'align') {
       this.timeLeft -= dtMs / 1000;
       const k = Math.max(0, this.timeLeft / this.level.layerTime);
@@ -279,7 +386,6 @@ export default class GameScene extends Phaser.Scene {
         this.printed[r][c] = { img, kept: true, good: false };
         if (i % 2 === 0) SFX.extrude((colX(c) - PX) / 200);
         if (Math.random() < 0.25) this.puff(colX(c) + CW / 2, y);
-        if (Math.random() < 0.6) burst(this, colX(c) + CW / 2, y, C.amber, 2, 60);
       });
     });
     this.time.delayedCall(order.length * stepMs + 140, () => this.evaluate());
@@ -324,7 +430,6 @@ export default class GameScene extends Phaser.Scene {
       floatText(this, midX, y, s.combo > 1 ? `PERFECT ×${s.combo}` : 'PERFECT', hex(C.greenGlow));
       SFX.perfect(s.combo);
       lightSweep(this, GRID_X0, rowY(r), COLS * CW, CH);
-      burst(this, PX, rowY(r) + CH / 2, C.greenGlow, 8 + Math.min(s.combo, 10) * 2, 240);
       this.flashLed(C.greenGlow);
       if (s.combo >= 3) {
         this.edgeGlow.setAlpha(0.05 + Math.min(s.combo, 10) * 0.012);
@@ -371,7 +476,6 @@ export default class GameScene extends Phaser.Scene {
           ]);
           curve.draw(g, 24);
         }
-        burst(this, x, landY, C.green, 6, 90);
       },
     });
   }
