@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { W, H, CW, CH, C, txt, hex, FONT } from '../theme.js';
 import { COLS, LEVELS } from '../levels.js';
-import { buildPrinter, PX, rowY, colX } from '../printer.js';
+import { buildPrinter, PX, BED_Y, rowY, colX } from '../printer.js';
 import { resumeAudio, SFX, Music, SONGS, tone } from '../sfx.js';
 import { dust, cameraLook, muteToggle } from '../fx.js';
 
@@ -60,17 +60,13 @@ export default class TitleScene extends Phaser.Scene {
     this.add.image(W / 2, H / 2, 'bg');
     const printer = buildPrinter(this);
 
-    // demo: the printer keeps printing a little rocket in the background
+    // demo: the printer keeps printing a little rocket, which lifts off when it is done
     const demo = ['..#..##..#..', '..#.####.#..', '..########..', '....####....', '....####....', '....#..#....', '....####....', '....####....', '.....##.....'];
     const cells = this.add.container(0, 0);
     this.children.bringToTop(printer.gantry); this.children.bringToTop(printer.head);
     let r = 0;
     const printRow = () => {
-      if (r >= demo.length) {
-        this.tweens.add({ targets: cells, alpha: 0, duration: 500, onComplete: () => { cells.removeAll(true); cells.alpha = 1; r = 0; } });
-        this.time.delayedCall(900, printRow);
-        return;
-      }
+      if (r >= demo.length) { liftOff(); return; }
       const row = [...demo[r]], y = rowY(r);
       printer.placeHead(printer.head.x, y);
       row.forEach((ch, c) => {
@@ -84,6 +80,35 @@ export default class TitleScene extends Phaser.Scene {
       });
       r++;
       this.time.delayedCall(520, printRow);
+    };
+    // The finished rocket: the head parks out of the way, the engine lights, and it flies out of the printer.
+    const liftOff = () => {
+      this.tweens.add({ targets: printer.head, x: PX - 130, duration: 300, ease: 'Sine.easeInOut' });
+      this.children.bringToTop(cells);
+      const flame = this.add.container(PX, BED_Y + 4);
+      const outer = this.add.image(0, 8, 'glow').setTint(C.hot).setScale(0.55, 1.1).setBlendMode('ADD');
+      const inner = this.add.image(0, 3, 'glow').setTint(0xfff3b0).setScale(0.28, 0.6).setBlendMode('ADD');
+      flame.add([outer, inner]).setAlpha(0);
+      cells.add(flame);
+      const flicker = this.tweens.add({ targets: [outer, inner], scaleY: '*=1.25', duration: 70, yoyo: true, repeat: -1 });
+      this.tweens.add({ targets: flame, alpha: 1, delay: 300, duration: 200 });
+      const smoke = this.add.particles(PX, BED_Y, 'glow', {
+        speedX: { min: -110, max: 110 }, speedY: { min: -25, max: 5 }, scale: { start: 0.35, end: 1.1 },
+        alpha: { start: 0.3, end: 0 }, lifespan: 1000, tint: 0x9aa6ba, frequency: 30, emitting: false,
+      });
+      this.time.delayedCall(350, () => smoke.start());
+      this.time.delayedCall(450, () => this.cameras.main.shake(900, 0.002));
+      this.tweens.add({
+        targets: cells, y: -BED_Y - 40, delay: 800, duration: 1500, ease: 'Cubic.easeIn',
+        onComplete: () => {
+          smoke.stop();
+          flicker.remove();
+          cells.removeAll(true);
+          cells.y = 0;
+          this.children.bringToTop(printer.gantry); this.children.bringToTop(printer.head);
+          this.time.delayedCall(900, () => { smoke.destroy(); r = 0; printRow(); });
+        },
+      });
     };
     printRow();
 
