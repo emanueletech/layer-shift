@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node test/smoke.mjs && node test/stuck-shift.mjs",
+    "test": "node test/smoke.mjs && node test/stuck-shift.mjs && node test/pause.mjs",
     "build": "node build.mjs",
     "play": "node test/play.mjs",
     "single": "node build-single.mjs"
