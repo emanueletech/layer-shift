@@ -133,7 +133,13 @@ export default class TitleScene extends Phaser.Scene {
       if (e.code === 'ShiftRight') { if (now - last.l < 160) go(); last.r = now; }
       if (e.code === 'Enter' || e.code === 'Space') go();
     });
-    this.input.on('pointerdown', () => { resumeAudio(); music.start(); go(); });
+    this.input.on('pointerdown', (p) => {
+      resumeAudio(); music.start();
+      // phones: play full screen where the browser allows it (Android; iOS Safari ignores it)
+      const el = document.documentElement;
+      if (p.wasTouch && el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+      go();
+    });
     this.cameras.main.fadeIn(400, 6, 8, 13);
     window.__gameState = { scene: 'title' };
   }

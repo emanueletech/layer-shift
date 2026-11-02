@@ -42,7 +42,11 @@ export default class ResultsScene extends Phaser.Scene {
 
     // the finished print, on a display plinth
     const cw = 26, ch = 15, rows = data.snapshot.length;
-    const px = 280, baseY = 420, x0 = px - (COLS * cw) / 2;
+    const px = 280, baseY = 420;
+    // centre the part on the plinth even if the plate slipped during the job
+    const usedCols = data.snapshot.flatMap((row) => row.map((v, c) => (v ? c : -1)).filter((c) => c >= 0));
+    const mid = usedCols.length ? (Math.min(...usedCols) + Math.max(...usedCols) + 1) / 2 : COLS / 2;
+    const x0 = px - mid * cw;
     const g = this.add.graphics();
     g.fillStyle(0x0f1724, 1).fillRoundedRect(px - 190, baseY + 2, 380, 16, 6);
     this.add.image(px, baseY + 4, 'glow').setScale(8, 1.2).setTint(C.greenGlow).setAlpha(0.18).setBlendMode('ADD');
@@ -90,7 +94,7 @@ export default class ResultsScene extends Phaser.Scene {
     const next = last ? 'SHIFT COMPLETE — SEE YOU TOMORROW NIGHT' : 'BOTH SHIFTS: NEXT JOB   ·   ONE SHIFT: RETRY';
     const t = txt(this, cx, 420, next, 12, C.greenGlow, { ox: 0.5, spacing: 2 });
     this.tweens.add({ targets: t, alpha: 0.4, duration: 700, yoyo: true, repeat: -1 });
-    if (last) txt(this, cx, 444, 'Press any Shift to play again', 11, C.muted, { ox: 0.5, weight: '500' });
+    if (last) txt(this, cx, 442, 'Press any Shift to play again', 11, C.muted, { ox: 0.5, weight: '500' });
 
     // Both Shifts within a moment = next job; a single Shift = retry (timing-based, see Game.press).
     const downAt = { l: -1e9, r: -1e9 }, bornAt = performance.now();
@@ -115,7 +119,28 @@ export default class ResultsScene extends Phaser.Scene {
       clearTimeout(retryTimer);
       retryTimer = setTimeout(() => leave('game', { level: data.level }), 220);
     });
-    this.input.on('pointerdown', () => goNext());
+    // buttons for touch and mouse
+    const button = (x, label, primary, fn) => {
+      const c = this.add.container(x, 482);
+      const bg = this.add.graphics();
+      const draw = (hover) => {
+        bg.clear();
+        bg.fillStyle(primary ? (hover ? C.greenGlow : C.green) : (hover ? 0x26324a : 0x1b2332), 1).fillRoundedRect(-80, -19, 160, 38, 9);
+        bg.lineStyle(1.5, primary || hover ? C.greenGlow : 0x3a475c, 1).strokeRoundedRect(-80, -19, 160, 38, 9);
+      };
+      draw(false);
+      c.add([bg, txt(this, 0, 0, label, 13, primary ? 0x05200f : C.text, { ox: 0.5, oy: 0.5, spacing: 1 })]);
+      c.setSize(160, 38).setInteractive({ useHandCursor: true });
+      c.on('pointerover', () => draw(true));
+      c.on('pointerout', () => draw(false));
+      c.on('pointerdown', (p, lx, ly, e) => { e?.stopPropagation(); if (performance.now() - bornAt > 500) fn(); });
+      return c;
+    };
+    if (last) button(cx, 'PLAY AGAIN', true, goNext);
+    else {
+      button(cx - 88, 'RETRY', false, () => { clearTimeout(retryTimer); leave('game', { level: data.level }); });
+      button(cx + 88, 'NEXT JOB', true, goNext);
+    }
     this.events.once('shutdown', () => clearTimeout(retryTimer));
 
     this.cameras.main.fadeIn(300, 6, 8, 13);

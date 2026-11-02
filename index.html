@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#06080d">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="description" content="LAYER SHIFT: fix every 3D-printed layer before it hits the plate, with nothing but the two Shift keys. GitHub Game Off 2026, theme SHIFT.">
   <title>Layer Shift</title>
   <style>
     @font-face { font-family: 'Poppins'; font-weight: 400; src: url('fonts/Poppins-Regular.woff2') format('woff2'); }
@@ -14,6 +18,11 @@
     canvas { display: block; }
     /* warm the fonts so they are ready before the first Phaser text is drawn */
     .warm { position: absolute; left: -9999px; }
+    /* phones held upright: the game is landscape */
+    #rotate { display: none; position: fixed; inset: 0; z-index: 10; background: #06080d; color: #e6edf6;
+      font: 600 18px Poppins, Arial, sans-serif; align-items: center; justify-content: center; flex-direction: column; gap: 14px; text-align: center; }
+    #rotate b { font-size: 44px; color: #5cff95; display: inline-block; transform: rotate(90deg); }
+    @media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
   </style>
 </head>
 <body>
@@ -21,6 +30,7 @@
   <div class="warm" style="font-family:Poppins;font-weight:500">a</div>
   <div class="warm" style="font-family:Poppins;font-weight:700">a</div>
   <div class="warm" style="font-family:PrinterMono;font-weight:700">a</div>
+  <div id="rotate"><b>&#x21bb;</b>Turn your phone sideways to print.</div>
   <div id="game"></div>
   <script src="main.js"></script>
 </body>
