@@ -87,4 +87,9 @@ const perfectJobs = results.filter((r, i) => i !== 1 && r.stars === 3).length;
 console.log('plate-shifted layers seen:', jolts, '· 3-star jobs (clean bot):', perfectJobs, '/', JOBS - 1);
 if (errors.length) { console.error('ERRORS:\n' + errors.join('\n')); process.exit(1); }
 if (perfectJobs !== JOBS - 1) { console.error('the clean bot should 3-star every job'); process.exit(1); }
+// night clock: clean layers take 4 min, the sloppy job 2 pays 10 min per botched layer, and the
+// whole night still ends before sunrise (06:00 = 480 min after 22:00)
+const last = results[JOBS - 1];
+console.log('clocked out at', last.clock, `(${last.night} min)`);
+if (!last.beforeDawn || last.clock >= '06:00' || results[1].night <= results[0].night + 11 * 4) { console.error('night clock is off'); process.exit(1); }
 console.log('PLAY OK');

@@ -44,13 +44,13 @@ Background `#06080d`, text `#e6edf6`, links `#5cff95`, buttons `#2ee66b`, font P
 > **Every layer comes out of the nozzle misaligned.**
 > Shift it back into place before it hits the plate, using nothing but the two Shift keys.
 >
-> It is night shift at the print farm: eight jobs in the queue between 22:00 and 06:00, from a calibration cube to a rocket that might just fly if you print it clean.
+> It is night shift at the print farm: eight jobs in the queue between 22:00 and sunrise, from a calibration cube to a rocket that might just fly if you print it clean, and in time.
 >
 > **Four kinds of SHIFT**
 > - **Layer shift:** the 3D-printing failure where layers slide out of place. Here, you fix it live. From job 5 the build plate itself slips mid-job: the part slides away and you have to chase it.
 > - **Shift keys:** the whole game is played with Left Shift and Right Shift.
 > - **Bit shift:** every layer is a row of filament bits. Push one past the edge and it is gone for good.
-> - **Night shift:** finish the queue before sunrise.
+> - **Night shift:** every layer takes 4 minutes, every botched layer and every retry costs you more. Clock out before the sun comes up at 06:00, or the rocket misses its launch window.
 >
 > **Controls**
 > - Left Shift / Right Shift: shift the layer (arrow keys and A / D work too)

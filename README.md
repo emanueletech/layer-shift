@@ -33,7 +33,7 @@
 | 🖨️ **Layer shift** | The 3D printing failure where layers slide out of place. Here, you fix it live. |
 | ⌨️ **Shift keys** | The whole game is played with <kbd>Left Shift</kbd> and <kbd>Right Shift</kbd>. |
 | 🔢 **Bit shift** | Each layer is a row of filament bits. Shift it left or right; bits pushed past the edge are gone for good. |
-| 🌙 **Night shift** | Eight print jobs run from 22:00 to 06:00. Finish before sunrise. |
+| 🌙 **Night shift** | The clock starts at 22:00 and the sun comes up at 06:00. Every layer takes 4 minutes, every botched layer costs 10 more, every retry 30. Clock out before sunrise. |
 
 From job 5 the build plate is loose: mid-layer it **jolts sideways**, a real layer shift. The part already printed slides with it, so does the blueprint, and the layer in the nozzle has to chase it.
 
@@ -54,7 +54,8 @@ Match each layer with the **blueprint** on the right before the timer runs out.
 - 🟥 Filament in the wrong place turns **red**.
 - ✨ Clean layers in a row build a **combo**.
 - 🫨 From job 5 the plate slips: follow the print, not the old spot.
-- 🚀 Print the last job clean and see what happens.
+- 🌅 Watch the clock: after 06:00 you are on overtime, and the rocket misses its launch window.
+- 🚀 Print the last job clean, before sunrise, and see what happens. Your best clock-out time is saved.
 
 ### 🧾 The print queue
 

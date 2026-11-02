@@ -1,4 +1,4 @@
-// Pause menu: the layer timer freezes while paused, R restarts the job, Esc resumes.
+// Pause menu: the layer timer freezes while paused, R restarts the job (+30 min on the clock), Esc resumes.
 import { createRequire } from 'node:module';
 import http from 'node:http';
 import { readFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -17,7 +17,7 @@ const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 const wait = (ms) => page.waitForTimeout(ms);
-const game = () => page.evaluate(() => { const s = window.__game.scene.getScene('game'); return { active: s.sys.isActive(), paused: !!s.paused, t: s.timeLeft, r: s.r, phase: s.phase }; });
+const game = () => page.evaluate(() => { const s = window.__game.scene.getScene('game'); return { active: s.sys.isActive(), paused: !!s.paused, t: s.timeLeft, r: s.r, phase: s.phase, night: s.night }; });
 const ready = () => page.waitForFunction(() => { const s = window.__game.scene.getScene('game'); return s.sys.isActive() && s.phase === 'align' && s.current; }, null, { timeout: 20000 });
 await page.goto('http://localhost:8127/');
 await wait(1500);
@@ -43,7 +43,8 @@ await page.waitForFunction(() => { const s = window.__game.scene.getScene('game'
 const d = await game();
 await browser.close(); server.close();
 console.log(JSON.stringify({ a, b, c, d }));
-const ok = a.paused && b.paused && Math.abs(a.t - b.t) < 0.01 && !c.paused && d.r === 0 && !d.paused && !errors.length;
+// restarting the job costs 30 minutes on the night clock (job 1 starts at 22:00)
+const ok = a.paused && b.paused && Math.abs(a.t - b.t) < 0.01 && !c.paused && d.r === 0 && !d.paused && d.night === 30 && !errors.length;
 if (errors.length) console.error(errors.join('\n'));
 console.log(ok ? 'PAUSE OK' : 'PAUSE FAIL');
 process.exit(ok ? 0 : 1);

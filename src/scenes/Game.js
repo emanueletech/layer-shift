@@ -5,8 +5,8 @@ import { buildPrinter, PX, BED_Y, GRID_X0, rowY, colX } from '../printer.js';
 import { tone, SFX, Music, SONGS, resumeAudio } from '../sfx.js';
 import { dust, cameraLook, glitch, lightSweep, hotCell, afterimage, muteToggle } from '../fx.js';
 import { shake, floatText } from '../juice.js';
+import { LAYER_MIN, MISS_MIN, RETRY_MIN, DAWN, clockText, startOfJob } from '../night.js';
 
-const TOTAL_LAYERS = LEVELS.reduce((a, l) => a + l.rows.length, 0);
 export const CHORD_MS = 110;   // max gap between the two Shift presses that counts as "both"
 export const TOUCH_CHORD_MS = 180;   // two fingers rarely land as close together as two keys
 const JOLT_AT = 0.45;      // seconds into a layer when a plate shift hits
@@ -20,7 +20,8 @@ export default class GameScene extends Phaser.Scene {
     this.levelIndex = data.level ?? 0;
     this.level = LEVELS[this.levelIndex];
     this.target = layersOf(this.level);
-    this.layersBefore = LEVELS.slice(0, this.levelIndex).reduce((a, l) => a + l.rows.length, 0);
+    this.night = startOfJob(this.registry, this.levelIndex, { retry: data.retry, newNight: data.newNight });   // minutes after 22:00
+    this.retried = !!data.retry;
     this.r = 0;
     this.phase = 'align';
     this.stats = { good: 0, extra: 0, missing: 0, droop: 0, lost: 0, perfect: 0, combo: 0, bestCombo: 0, jolts: 0 };
@@ -82,6 +83,9 @@ export default class GameScene extends Phaser.Scene {
   buildHud() {
     txt(this, 24, 18, 'NIGHT SHIFT', 12, C.muted, { spacing: 3 });
     this.clock = txt(this, 22, 32, '22:00', 30, C.greenGlow, { mono: true });
+    this.dawnLabel = txt(this, 24, 70, '', 10, C.muted, { spacing: 1, weight: '500' });
+    // warm light creeping in from the top as sunrise gets close
+    this.sunrise = this.add.image(W / 2, -40, 'glow').setDisplaySize(W * 1.4, 260).setTint(C.amber).setBlendMode('ADD').setAlpha(0).setDepth(-0.5);
     txt(this, PX, 34, this.level.name.toUpperCase(), 14, C.text, { ox: 0.5, spacing: 3 });
     this.layerLabel = txt(this, PX, 52, '', 11, C.muted, { ox: 0.5, spacing: 2, weight: '500' });
 
@@ -218,12 +222,12 @@ export default class GameScene extends Phaser.Scene {
     SFX.click();
   }
 
-  restart(level) {
+  restart(level, opts = {}) {
     this.time.paused = false;
     this.tweens.resumeAll();
     this.paused = false;
     this.cameras.main.fadeOut(200, 6, 8, 13);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('game', { level }));
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('game', { level, ...opts }));
   }
 
   quit() {
@@ -246,8 +250,8 @@ export default class GameScene extends Phaser.Scene {
     m.add(txt(this, W / 2, y0 + 70, `${this.level.name} · layer ${Math.min(this.r + 1, this.target.length)} / ${this.target.length}`, 12, C.muted, { ox: 0.5, weight: '500' }));
     const items = [
       ['RESUME', 'P / ESC', () => this.resume(), true],
-      ['RESTART THIS JOB', 'R', () => this.restart(this.levelIndex)],
-      ['RESTART THE NIGHT · 22:00', 'N', () => this.restart(0)],
+      [`RESTART THIS JOB · +${RETRY_MIN} MIN`, 'R', () => this.restart(this.levelIndex, { retry: true })],
+      ['RESTART THE NIGHT · 22:00', 'N', () => this.restart(0, { newNight: true })],
       ['QUIT TO TITLE', 'Q', () => this.quit()],
     ];
     items.forEach(([label, key, fn, primary], i) => {
@@ -278,8 +282,8 @@ export default class GameScene extends Phaser.Scene {
       if (e.code === 'ShiftLeft' || e.code === 'ArrowLeft' || e.code === 'KeyA') this.press('left');
       else if (e.code === 'ShiftRight' || e.code === 'ArrowRight' || e.code === 'KeyD') this.press('right');
       else if (e.code === 'Escape' || e.code === 'KeyP') this.togglePause();
-      else if (this.paused && e.code === 'KeyR') this.restart(this.levelIndex);
-      else if (this.paused && e.code === 'KeyN') this.restart(0);
+      else if (this.paused && e.code === 'KeyR') this.restart(this.levelIndex, { retry: true });
+      else if (this.paused && e.code === 'KeyN') this.restart(0, { newNight: true });
       else if (this.paused && e.code === 'KeyQ') this.quit();
     });
     kb.on('keyup', (e) => {
@@ -515,6 +519,7 @@ export default class GameScene extends Phaser.Scene {
     const s = this.stats;
     s.good += good; s.extra += extra; s.missing += missing; s.droop += droop;
     const perfect = extra === 0 && missing === 0 && droop === 0;
+    this.addTime(LAYER_MIN + (perfect ? 0 : MISS_MIN), !perfect);
     const midX = PX, y = rowY(r) - 18;
     if (perfect) {
       s.perfect++; s.combo++; s.bestCombo = Math.max(s.bestCombo, s.combo);
@@ -595,15 +600,32 @@ export default class GameScene extends Phaser.Scene {
     if (this.stats.combo > 1) this.tweens.add({ targets: this.comboText, scale: 1.2, duration: 90, yoyo: true });
   }
 
+  // Time passes per printed layer; a botched layer costs extra and says so next to the clock.
+  addTime(min, penalty) {
+    const wasDark = this.night < DAWN;
+    this.night += min;
+    if (penalty) {
+      floatText(this, 76, 104, `+${MISS_MIN} MIN`, hex(C.amber));
+      this.tweens.add({ targets: this.clock, x: { from: 28, to: 22 }, duration: 240, ease: 'Elastic.easeOut' });
+    }
+    if (wasDark && this.night >= DAWN) {
+      floatText(this, PX, 200, 'SUNRISE: OVERTIME!', hex(C.amber));
+      SFX.error();
+    }
+    this.updateClock();
+  }
+
   updateClock() {
-    const done = this.layersBefore + this.r;
-    const mins = 22 * 60 + Math.round((done / TOTAL_LAYERS) * 8 * 60);
-    const hh = Math.floor(mins / 60) % 24, mm = mins % 60;
-    this.clockValue = [String(hh).padStart(2, '0'), String(mm).padStart(2, '0')];
-    this.clock.setText(this.clockValue.join(':'));
+    const n = this.night, left = Math.round(DAWN - n);
+    this.clock.setText(clockText(n));
+    this.clock.setColor(hex(n >= DAWN ? C.red : left <= 60 ? C.amber : C.greenGlow));
+    this.dawnLabel.setText(n >= DAWN ? `OVERTIME +${Math.floor(-left / 60)}:${String(-left % 60).padStart(2, '0')}`
+      : `SUNRISE IN ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`);
+    this.dawnLabel.setColor(hex(n >= DAWN ? C.red : left <= 60 ? C.amber : C.muted));
+    this.sunrise.setAlpha(Phaser.Math.Clamp((n - (DAWN - 120)) / 120, 0, 1) * 0.35);
     if (!this.colonBlink) this.colonBlink = this.time.addEvent({ delay: 500, loop: true, callback: () => {
       this.colonOn = !this.colonOn;
-      if (this.phase !== 'done') this.clock.setText(this.clockValue.join(this.colonOn ? ':' : ' '));
+      if (this.phase !== 'done') this.clock.setText(clockText(this.night, !this.colonOn));
     } });
   }
 
@@ -617,13 +639,15 @@ export default class GameScene extends Phaser.Scene {
     this.phase = 'done';
     this.r = this.target.length;
     this.updateClock();
+    this.registry.set('night', this.night);
+    this.registry.set('nightNext', this.levelIndex + 1);
     this.printer.placeHead(PX, rowY(this.target.length + 1));
     SFX.win();
     const snapshot = this.printed.map((row) => row.map((cell) => (cell && cell.kept ? (cell.good ? 1 : 2) : 0)));
     this.time.delayedCall(900, () => {
       this.cameras.main.fadeOut(300, 6, 8, 13);
       this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('results', {
-        level: this.levelIndex, stats: this.stats, accuracy: this.accuracy(), snapshot, clock: this.clock.text,
+        level: this.levelIndex, stats: this.stats, accuracy: this.accuracy(), snapshot, clock: clockText(this.night), night: this.night, retried: this.retried,
       }));
     });
   }

@@ -4,6 +4,7 @@ import { COLS, LEVELS } from '../levels.js';
 import { tone, SFX } from '../sfx.js';
 import { cameraLook, muteToggle } from '../fx.js';
 import { layerShiftLogo } from './Title.js';
+import { DAWN, RETRY_MIN, clockText, bestClockOut, saveClockOut } from '../night.js';
 
 const starsFor = (acc) => (acc >= 0.95 ? 3 : acc >= 0.8 ? 2 : acc >= 0.6 ? 1 : 0);
 
@@ -35,6 +36,7 @@ export default class ResultsScene extends Phaser.Scene {
   create(data) {
     this.add.image(W / 2, H / 2, 'bg');
     const level = LEVELS[data.level], last = data.level >= LEVELS.length - 1;
+    const night = data.night ?? 0, beforeDawn = night < DAWN;
     const stars = starsFor(data.accuracy);
     const best = this.registry.get('best') || {};
     best[level.id] = Math.max(best[level.id] || 0, stars);
@@ -58,7 +60,12 @@ export default class ResultsScene extends Phaser.Scene {
       this.tweens.add({ targets: img, alpha: 1, delay: r * 45 + c * 6, duration: 160 });
     }));
     // A clean rocket earns a launch.
-    if (level.id === 'rocket' && stars >= 2) this.time.delayedCall(2200, () => this.launch(print, px, baseY));
+    // A clean rocket, finished before sunrise, earns a launch. After sunrise the launch window is gone.
+    if (level.id === 'rocket' && stars >= 2 && beforeDawn) this.time.delayedCall(2200, () => this.launch(print, px, baseY));
+    else if (level.id === 'rocket' && stars >= 2) {
+      const miss = txt(this, px, 200, 'LAUNCH WINDOW MISSED', 22, C.amber, { ox: 0.5, oy: 0.5 }).setAlpha(0);
+      this.tweens.add({ targets: miss, alpha: 1, delay: 1800, duration: 400 });
+    }
     txt(this, px, baseY + 34, level.name.toUpperCase(), 14, C.muted, { ox: 0.5, spacing: 3 });
 
     // right: verdict
@@ -91,10 +98,22 @@ export default class ResultsScene extends Phaser.Scene {
       this.add.rectangle(cx, y + 24, 300, 1, 0x223047);
     });
 
-    const next = last ? 'SHIFT COMPLETE — SEE YOU TOMORROW NIGHT' : 'BOTH SHIFTS: NEXT JOB   ·   ONE SHIFT: RETRY';
-    const t = txt(this, cx, 420, next, 12, C.greenGlow, { ox: 0.5, spacing: 2 });
+    // the night so far: time left before sunrise, or the clock-out time at the end
+    let next, sub;
+    if (last) {
+      const best = beforeDawn ? bestClockOut() : null, record = beforeDawn && saveClockOut(night);
+      next = beforeDawn ? `CLOCKED OUT AT ${clockText(night)} · BEFORE SUNRISE` : `OVERTIME · CLOCKED OUT AT ${clockText(night)}`;
+      sub = record ? (best === null ? 'First shift on the books. Press any Shift to play again' : `New best: ${clockText(night)} (was ${clockText(best)}). Press any Shift`)
+        : best !== null ? `Best clock-out: ${clockText(best)} · press any Shift to play again` : 'Sunrise is at 06:00 · press any Shift to play again';
+    } else {
+      const left = Math.round(DAWN - night);
+      next = 'BOTH SHIFTS: NEXT JOB   ·   ONE SHIFT: RETRY';
+      sub = left > 0 ? `Sunrise in ${Math.floor(left / 60)}h ${String(left % 60).padStart(2, '0')}m · a retry costs ${RETRY_MIN} min`
+        : 'The sun is up: you are on overtime';
+    }
+    const t = txt(this, cx, 420, next, 12, last && !beforeDawn ? C.amber : C.greenGlow, { ox: 0.5, spacing: 2 });
     this.tweens.add({ targets: t, alpha: 0.4, duration: 700, yoyo: true, repeat: -1 });
-    if (last) txt(this, cx, 442, 'Press any Shift to play again', 11, C.muted, { ox: 0.5, weight: '500' });
+    txt(this, cx, 442, sub, 11, !last && night >= DAWN ? C.amber : C.muted, { ox: 0.5, weight: '500' });
 
     // Both Shifts within a moment = next job; a single Shift = retry (timing-based, see Game.press).
     const downAt = { l: -1e9, r: -1e9 }, bornAt = performance.now();
@@ -117,7 +136,7 @@ export default class ResultsScene extends Phaser.Scene {
       downAt[side] = now;
       if (now - downAt[other] < 160) return goNext();
       clearTimeout(retryTimer);
-      retryTimer = setTimeout(() => leave('game', { level: data.level }), 220);
+      retryTimer = setTimeout(() => leave('game', { level: data.level, retry: true }), 220);
     });
     // buttons for touch and mouse
     const button = (x, label, primary, fn) => {
@@ -138,7 +157,7 @@ export default class ResultsScene extends Phaser.Scene {
     };
     if (last) button(cx, 'PLAY AGAIN', true, goNext);
     else {
-      button(cx - 88, 'RETRY', false, () => { clearTimeout(retryTimer); leave('game', { level: data.level }); });
+      button(cx - 88, `RETRY +${RETRY_MIN}M`, false, () => { clearTimeout(retryTimer); leave('game', { level: data.level, retry: true }); });
       button(cx + 88, 'NEXT JOB', true, goNext);
     }
     this.events.once('shutdown', () => clearTimeout(retryTimer));
@@ -147,6 +166,6 @@ export default class ResultsScene extends Phaser.Scene {
     if (stars) this.time.delayedCall(300, () => SFX.win());
     cameraLook(this);
     muteToggle(this);
-    window.__gameState = { scene: 'results', stars, accuracy: data.accuracy };
+    window.__gameState = { scene: 'results', stars, accuracy: data.accuracy, clock: data.clock, night, beforeDawn };
   }
 }
