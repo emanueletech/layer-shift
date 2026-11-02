@@ -115,7 +115,7 @@ export default class TitleScene extends Phaser.Scene {
     muteToggle(this);
     this.events.once('shutdown', () => music.stop());
 
-    const held = { l: false, r: false };
+    const last = { l: -1e9, r: -1e9 };
     let started = false;
     const go = () => {
       if (started) return;
@@ -127,11 +127,12 @@ export default class TitleScene extends Phaser.Scene {
     };
     this.input.keyboard.on('keydown', (e) => {
       resumeAudio(); music.start();
-      if (e.code === 'ShiftLeft') held.l = true;
-      if (e.code === 'ShiftRight') held.r = true;
-      if ((held.l && held.r) || e.code === 'Enter' || e.code === 'Space') go();
+      if (e.repeat) return;
+      const now = performance.now();
+      if (e.code === 'ShiftLeft') { if (now - last.r < 160) go(); last.l = now; }
+      if (e.code === 'ShiftRight') { if (now - last.l < 160) go(); last.r = now; }
+      if (e.code === 'Enter' || e.code === 'Space') go();
     });
-    this.input.keyboard.on('keyup', (e) => { if (e.code === 'ShiftLeft') held.l = false; if (e.code === 'ShiftRight') held.r = false; });
     this.input.on('pointerdown', () => { resumeAudio(); music.start(); go(); });
     this.cameras.main.fadeIn(400, 6, 8, 13);
     window.__gameState = { scene: 'title' };

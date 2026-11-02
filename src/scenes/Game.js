@@ -7,6 +7,7 @@ import { dust, cameraLook, glitch, lightSweep, hotCell, afterimage, muteToggle }
 import { shake, burst, floatText } from '../juice.js';
 
 const TOTAL_LAYERS = LEVELS.reduce((a, l) => a + l.rows.length, 0);
+export const CHORD_MS = 110;   // max gap between the two Shift presses that counts as "both"
 const BP = { x: 750, cw: 21, ch: 14, top: 168, bottom: 352 };   // blueprint grid area
 
 export default class GameScene extends Phaser.Scene {
@@ -21,7 +22,6 @@ export default class GameScene extends Phaser.Scene {
     this.phase = 'align';
     this.stats = { good: 0, extra: 0, missing: 0, droop: 0, lost: 0, perfect: 0, combo: 0, bestCombo: 0 };
     this.printed = [];          // printed[r][c] = { img, kept, good } | null
-    this.held = { left: false, right: false };
   }
 
   create() {
@@ -148,23 +148,31 @@ export default class GameScene extends Phaser.Scene {
     this.input.on('pointerup', (p) => { if (p.side) this.release(p.side); });
   }
 
+  // Both Shifts = a chord: the second key arriving within CHORD_MS of the first. Timing, not "held"
+  // state: macOS and Windows often skip the keyup of one Shift while the other is down, which left a
+  // key stuck as held and turned the next single Shift into a drop.
   press(side) {
     resumeAudio();
-    this.held[side] = true;
+    const now = this.time.now, other = side === 'left' ? 'right' : 'left';
+    this.lastDown = this.lastDown || { left: -1e9, right: -1e9 };
+    this.lastDown[side] = now;
     (side === 'left' ? this.keyL : this.keyR).press();
-    if (this.held.left && this.held.right) {
-      // Both Shifts = drop. The first key of the chord already shifted the layer: undo that shift.
-      if (this.undo && this.time.now - this.undo.t < 180) { this.current = this.undo.row; this.stats.lost = this.undo.lost; this.drawGhost(0); }
+    clearTimeout(this.capTimer?.[side]);
+    this.capTimer = this.capTimer || {};
+    this.capTimer[side] = setTimeout(() => this.release(side), 160);
+    if (now - this.lastDown[other] < CHORD_MS) {
+      // the first key of the chord already shifted the layer: undo that shift, then drop
+      if (this.undo && now - this.undo.t < CHORD_MS) { this.current = this.undo.row; this.stats.lost = this.undo.lost; this.drawGhost(0); }
       this.undo = null;
+      this.lastDown[other] = -1e9;
       this.drop();
       return;
     }
-    this.undo = { t: this.time.now, row: this.current?.slice(), lost: this.stats.lost };
+    this.undo = { t: now, row: this.current?.slice(), lost: this.stats.lost };
     this.shift(side === 'left' ? -1 : 1);
   }
 
   release(side) {
-    this.held[side] = false;
     (side === 'left' ? this.keyL : this.keyR).release();
   }
 

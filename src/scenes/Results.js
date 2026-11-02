@@ -93,7 +93,8 @@ export default class ResultsScene extends Phaser.Scene {
     this.tweens.add({ targets: t, alpha: 0.4, duration: 700, yoyo: true, repeat: -1 });
     if (last) txt(this, cx, 444, 'Press any Shift to play again', 11, C.muted, { ox: 0.5, weight: '500' });
 
-    const held = { l: false, r: false };
+    // Both Shifts within a moment = next job; a single Shift = retry (timing-based, see Game.press).
+    const downAt = { l: -1e9, r: -1e9 }, bornAt = performance.now();
     let leaving = false;
     const leave = (scene, payload) => {
       if (leaving) return;
@@ -102,24 +103,20 @@ export default class ResultsScene extends Phaser.Scene {
       this.cameras.main.fadeOut(250, 6, 8, 13);
       this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(scene, payload));
     };
-    const decide = () => {
-      if (last) return leave('title');
-      if (held.l && held.r) leave('game', { level: data.level + 1 });
-    };
     let retryTimer = null;
+    const goNext = () => { clearTimeout(retryTimer); leave(last ? 'title' : 'game', last ? undefined : { level: data.level + 1 }); };
     this.input.keyboard.on('keydown', (e) => {
-      if (e.repeat) return;
-      if (e.code === 'ShiftLeft') held.l = true;
-      if (e.code === 'ShiftRight') held.r = true;
-      if (e.code === 'Enter' || e.code === 'Space') { held.l = held.r = true; }
-      if (held.l && held.r) { clearTimeout(retryTimer); return decide(); }
-      if (last) return decide();
-      // a single Shift retries, unless the other one follows within a moment
+      if (e.repeat || performance.now() - bornAt < 500) return;          // ignore keys still flying from the last layer
+      if (e.code === 'Enter' || e.code === 'Space') return goNext();
+      if (e.code !== 'ShiftLeft' && e.code !== 'ShiftRight') return;
+      if (last) return goNext();
+      const now = performance.now(), side = e.code === 'ShiftLeft' ? 'l' : 'r', other = side === 'l' ? 'r' : 'l';
+      downAt[side] = now;
+      if (now - downAt[other] < 160) return goNext();
       clearTimeout(retryTimer);
-      retryTimer = setTimeout(() => { if (!(held.l && held.r)) leave('game', { level: data.level }); }, 260);
+      retryTimer = setTimeout(() => leave('game', { level: data.level }), 220);
     });
-    this.input.keyboard.on('keyup', (e) => { if (e.code === 'ShiftLeft') held.l = false; if (e.code === 'ShiftRight') held.r = false; });
-    this.input.on('pointerdown', () => (last ? leave('title') : leave('game', { level: data.level + 1 })));
+    this.input.on('pointerdown', () => goNext());
     this.events.once('shutdown', () => clearTimeout(retryTimer));
 
     this.cameras.main.fadeIn(300, 6, 8, 13);
