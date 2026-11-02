@@ -1,4 +1,4 @@
-// Records the README / itch.io media: a gameplay GIF (title -> rocket job with plate shifts -> lift-off),
+// Records the README / itch.io media: a gameplay GIF (the rocket job with plate shifts, ending in its lift-off),
 // four screenshots and the itch.io cover. Needs ffmpeg and ImageMagick. Run: npm run build && npm run media
 import { createRequire } from 'node:module';
 import http from 'node:http';
@@ -60,7 +60,6 @@ async function play({ mistakes = [], shots = {} } = {}) {
 
 await page.goto('http://localhost:8129/');
 await wait(2400);
-const gifStart = mark();
 await wait(2600);
 await shot('title');
 await chord();
@@ -76,25 +75,29 @@ await page.evaluate(() => { const s = window.__game.scene.getScene('game'); s.jo
 const joltShot = page.waitForFunction(() => window.__game.scene.getScene('game').joltedAt === 8, null, { timeout: 60000 })
   .then(() => wait(260)).then(() => shot('plate-shift'));
 await play({ mistakes: [2] });
+const resultsAt = mark();
 await joltShot;
-await wait(2000);
+// results: stars land by ~1.5 s, the rocket ignites at 2.2 s, climbs from 2.7 s and is gone by ~4.6 s
+await wait(Math.max(0, 2000 - (mark() - resultsAt) * 1000));
 await shot('results');
-await page.waitForTimeout(900);
+await wait(Math.max(0, 3300 - (mark() - resultsAt) * 1000));
 await shot('liftoff');      // the rocket mid-climb
-await wait(1700);
+await wait(Math.max(0, 6000 - (mark() - resultsAt) * 1000));
 const gifEnd = mark();
 await ctx.close(); await browser.close(); server.close();
 
 const video = join(TMP, readdirSync(TMP).find((f) => f.endsWith('.webm')));
-// title (3.6 s) + the whole rocket job, cut together, played at 1.35x; 12 fps, 600 px wide, one shared palette
+// The rocket job: printing (plate shifts included) at 1.5x, then the results and the whole lift-off at
+// real speed, until the rocket has left the screen. 12 fps, 600 px wide, one shared palette.
+const PRINT_SPEED = 1.5, endFrom = resultsAt + 1.3;
 const ff = `ffmpeg -y -loglevel error -i ${video} -filter_complex "` +
-  `[0:v]trim=${gifStart.toFixed(2)}:${(gifStart + 3.6).toFixed(2)},setpts=PTS-STARTPTS[a];` +
-  `[0:v]trim=${(rocketAt + 0.3).toFixed(2)}:${gifEnd.toFixed(2)},setpts=PTS-STARTPTS[b];` +
-  `[a][b]concat=n=2:v=1,setpts=PTS/1.35,fps=12,scale=600:-1:flags=lanczos,split[x][y];` +
+  `[0:v]trim=${(rocketAt + 0.3).toFixed(2)}:${resultsAt.toFixed(2)},setpts=(PTS-STARTPTS)/${PRINT_SPEED}[a];` +
+  `[0:v]trim=${endFrom.toFixed(2)}:${gifEnd.toFixed(2)},setpts=PTS-STARTPTS[b];` +
+  `[a][b]concat=n=2:v=1,fps=12,scale=600:-1:flags=lanczos,split[x][y];` +
   `[x]palettegen=max_colors=96:stats_mode=diff[p];[y][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle"`;
 execSync(`${ff} ${OUT}/gameplay.gif`, { stdio: 'inherit' });
 // itch.io cover: 630x500, from the title screen
 execSync(`convert ${OUT}/title.png -crop 630x500+330+20 +repage ${OUT}/cover.png`);
 const kb = (f) => (readFileSync(f).length / 1024).toFixed(0) + ' KB';
-console.log('gif', kb(`${OUT}/gameplay.gif`), `(${((gifEnd - rocketAt + 3.3) / 1.35).toFixed(1)} s)`, '· cover', kb(`${OUT}/cover.png`));
+console.log('gif', kb(`${OUT}/gameplay.gif`), `(${((resultsAt - rocketAt - 0.3) / PRINT_SPEED + gifEnd - endFrom).toFixed(1)} s)`, '· cover', kb(`${OUT}/cover.png`));
 console.log('MEDIA OK');
