@@ -79,3 +79,10 @@ Background `#06080d`, text `#e6edf6`, links `#5cff95`, buttons `#2ee66b`, font P
 - Pin the itch.io link in the repo's "About" box (Website field).
 - Share the GIF (`docs/media/gameplay.gif`) with the itch.io link.
 - Rate and comment other entries: it helps your own entry get played.
+
+## 6. Automatic updates (optional)
+
+`.github/workflows/itch.yml` re-uploads the game to the itch.io page on every push to `main` with butler.
+After creating the page once by hand: itch.io > Settings > API keys > generate a key, then save it in the
+GitHub repo under Settings > Secrets and variables > Actions as `BUTLER_API_KEY`. Without the secret the job is skipped.
+The first butler upload appears as a new file on the page: tick "This file will be played in the browser" on it once.

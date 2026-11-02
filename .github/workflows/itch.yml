@@ -1,0 +1,48 @@
+# Publishes the browser build to itch.io with butler on every push to main (and on demand).
+# One-time setup:
+#   1. Create the project on itch.io (Kind of project: HTML) with URL slug "layer-shift".
+#   2. itch.io > Settings > API keys > Generate new API key.
+#   3. GitHub repo > Settings > Secrets and variables > Actions > New repository secret: BUTLER_API_KEY.
+#   4. Optional repository variable ITCH_TARGET if the page is not emanueletech/layer-shift.
+# Without the secret the job is skipped.
+name: Publish to itch.io
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: itch
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+      ITCH_TARGET: ${{ vars.ITCH_TARGET || 'emanueletech/layer-shift' }}
+    steps:
+      - name: Check the API key
+        id: key
+        run: |
+          if [ -z "$BUTLER_API_KEY" ]; then echo "BUTLER_API_KEY not set: skipping the itch.io upload"; echo "ok=false" >> "$GITHUB_OUTPUT"; else echo "ok=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@v4
+        if: steps.key.outputs.ok == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.key.outputs.ok == 'true'
+        with:
+          node-version: 20
+          cache: npm
+      - if: steps.key.outputs.ok == 'true'
+        run: npm ci && npm run build && node test/levels.mjs
+      - name: Install butler
+        if: steps.key.outputs.ok == 'true'
+        run: |
+          curl -sSL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q butler.zip -d butler && chmod +x butler/butler && butler/butler -V
+      - name: Push to itch.io (html5 channel)
+        if: steps.key.outputs.ok == 'true'
+        run: |
+          mkdir -p upload && cp -r dist/index.html dist/main.js dist/fonts upload/
+          butler/butler push upload "$ITCH_TARGET:html5" --userversion "$(date -u +%Y.%m.%d)-${GITHUB_SHA::7}"
