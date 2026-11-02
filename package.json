@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "node test/smoke.mjs",
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "play": "node test/play.mjs",
+    "single": "node build-single.mjs"
   },
   "keywords": [],
   "author": "",

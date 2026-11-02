@@ -1,6 +1,6 @@
-// Builds dist/ (index.html + bundled main.js) and dist/game-web.zip for itch.io HTML upload.
+// Builds dist/ (index.html + bundled main.js + public/ assets) and dist/game-web.zip for the itch.io HTML upload.
 import { build } from 'esbuild';
-import { mkdirSync, copyFileSync, rmSync } from 'node:fs';
+import { mkdirSync, copyFileSync, rmSync, cpSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 
 rmSync('dist', { recursive: true, force: true });
@@ -15,5 +15,6 @@ await build({
   logLevel: 'info',
 });
 copyFileSync('index.html', 'dist/index.html');
-execSync('cd dist && zip -qr game-web.zip index.html main.js');
+cpSync('public', 'dist', { recursive: true });
+execSync('cd dist && zip -qr game-web.zip index.html main.js fonts');
 console.log('Built dist/ and dist/game-web.zip');
