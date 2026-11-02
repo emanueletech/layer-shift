@@ -8,6 +8,9 @@ import { shake, floatText } from '../juice.js';
 
 const TOTAL_LAYERS = LEVELS.reduce((a, l) => a + l.rows.length, 0);
 export const CHORD_MS = 110;   // max gap between the two Shift presses that counts as "both"
+export const TOUCH_CHORD_MS = 180;   // two fingers rarely land as close together as two keys
+const JOLT_AT = 0.45;      // seconds into a layer when a plate shift hits
+const JOLT_BONUS = 0.7;    // seconds given back to re-align after it
 const BP = { x: 750, cw: 21, ch: 14, top: 168, bottom: 352 };   // blueprint grid area
 
 export default class GameScene extends Phaser.Scene {
@@ -20,8 +23,21 @@ export default class GameScene extends Phaser.Scene {
     this.layersBefore = LEVELS.slice(0, this.levelIndex).reduce((a, l) => a + l.rows.length, 0);
     this.r = 0;
     this.phase = 'align';
-    this.stats = { good: 0, extra: 0, missing: 0, droop: 0, lost: 0, perfect: 0, combo: 0, bestCombo: 0 };
+    this.stats = { good: 0, extra: 0, missing: 0, droop: 0, lost: 0, perfect: 0, combo: 0, bestCombo: 0, jolts: 0 };
     this.printed = [];          // printed[r][c] = { img, kept, good } | null
+    this.plateOffset = 0;       // columns the build plate has slipped since the job started
+    this.jolts = this.pickJolts();
+    this.joltedAt = -1;
+  }
+
+  // Layers on which the plate slips: never the first two or the last, at least 3 layers apart.
+  pickJolts() {
+    const n = this.level.plateShifts || 0, last = this.target.length - 2, out = new Set();
+    for (let tries = 0; out.size < n && tries < 200; tries++) {
+      const r = Phaser.Math.Between(2, last);
+      if ([...out].every((o) => Math.abs(o - r) >= 3)) out.add(r);
+    }
+    return out;
   }
 
   create() {
@@ -42,7 +58,7 @@ export default class GameScene extends Phaser.Scene {
     this.children.bringToTop(this.printer.gantry);
     this.children.bringToTop(this.printer.head);
 
-    this.music = new Music({ ...SONGS.work, bpm: SONGS.work.bpm + this.levelIndex * 10 });
+    this.music = new Music({ ...SONGS.work, bpm: SONGS.work.bpm + this.levelIndex * 6 });
     this.music.start();
     dust(this, 160, 80, 340, 360);
     cameraLook(this);
@@ -107,7 +123,7 @@ export default class GameScene extends Phaser.Scene {
     txt(this, x0 + w - 24, y0 + h - 124, 'COMBO', 10, C.blueprintInk, { ox: 1, spacing: 3, weight: '500' });
     this.comboText = txt(this, x0 + w - 24, y0 + h - 108, '×0', 30, C.amber, { ox: 1, mono: true });
     g.lineStyle(1, C.blueprintInk, 0.25).lineBetween(x0 + 24, y0 + h - 58, x0 + w - 24, y0 + h - 58);
-    txt(this, x0 + w / 2, y0 + h - 34, this.level.hint, 11, C.blueprintInk, { ox: 0.5, oy: 0.5, weight: '500', align: 'center' }).setAlpha(0.85).setWordWrapWidth(w - 48);
+    this.hintText = txt(this, x0 + w / 2, y0 + h - 34, this.level.hint, 11, C.blueprintInk, { ox: 0.5, oy: 0.5, weight: '500', align: 'center' }).setAlpha(0.85).setWordWrapWidth(w - 48);
   }
 
   bpX(c) { return BP.x - (COLS * BP.cw) / 2 + c * BP.cw; }
@@ -128,11 +144,35 @@ export default class GameScene extends Phaser.Scene {
       c.add([bg, t]);
       c.press = () => { draw(true); t.setColor(hex(0x05200f)); this.tweens.add({ targets: c, y: 518, duration: 50, yoyo: true }); };
       c.release = () => { draw(false); t.setColor(hex(C.text)); };
+      // tappable on touch screens (and clickable with a mouse)
+      c.setSize(92, 40).setInteractive();
+      c.on('pointerdown', (p, lx, ly, e) => { e?.stopPropagation(); if (this.paused) return; p.side = side; this.press(side, p.wasTouch ? TOUCH_CHORD_MS : CHORD_MS); });
       return c;
     };
     this.keyL = mk(PX - 110, '⇧ SHIFT  ⟵', 'left');
     this.keyR = mk(PX + 110, '⟶  SHIFT ⇧', 'right');
-    txt(this, PX, 516, 'both = drop', 10, C.muted, { ox: 0.5, oy: 0.5, weight: '500' });
+
+    // DROP: the same as both Shifts, as one button for thumbs
+    const d = this.add.container(PX, 516);
+    const dbg = this.add.graphics();
+    const ddraw = (on) => {
+      dbg.clear();
+      dbg.fillStyle(on ? C.amber : 0x141b27, 1).fillRoundedRect(-38, -14, 76, 28, 7);
+      dbg.lineStyle(1.5, on ? C.amber : 0x2c3748, 1).strokeRoundedRect(-38, -14, 76, 28, 7);
+    };
+    ddraw(false);
+    const dt = txt(this, 0, 0, 'DROP ⇧+⇧', 10, C.muted, { ox: 0.5, oy: 0.5, weight: '700', spacing: 1 });
+    d.add([dbg, dt]);
+    d.setSize(76, 40).setInteractive();
+    d.on('pointerdown', (p, lx, ly, e) => {
+      e?.stopPropagation();
+      if (this.paused || this.phase !== 'align') return;
+      resumeAudio();
+      ddraw(true); dt.setColor(hex(0x2a1a00));
+      this.time.delayedCall(140, () => { ddraw(false); dt.setColor(hex(C.muted)); });
+      this.drop();
+    });
+    this.dropBtn = d;
   }
 
   // ---------- pause ----------
@@ -246,16 +286,20 @@ export default class GameScene extends Phaser.Scene {
       if (e.code === 'ShiftLeft' || e.code === 'ArrowLeft' || e.code === 'KeyA') this.release('left');
       else if (e.code === 'ShiftRight' || e.code === 'ArrowRight' || e.code === 'KeyD') this.release('right');
     });
-    this.input.addPointer(1);
-    // touch: left half of the screen = left Shift, right half = right Shift, both at once = drop
-    this.input.on('pointerdown', (p) => { if (this.paused) return; p.side = p.x < W / 2 ? 'left' : 'right'; this.press(p.side); });
+    this.input.addPointer(2);
+    // touch: left of the printer centre = left Shift, right of it = right Shift, two fingers at once = drop
+    this.input.on('pointerdown', (p) => {
+      if (this.paused) return;
+      p.side = p.x < PX ? 'left' : 'right';
+      this.press(p.side, p.wasTouch ? TOUCH_CHORD_MS : CHORD_MS);
+    });
     this.input.on('pointerup', (p) => { if (p.side) this.release(p.side); });
   }
 
   // Both Shifts = a chord: the second key arriving within CHORD_MS of the first. Timing, not "held"
   // state: macOS and Windows often skip the keyup of one Shift while the other is down, which left a
   // key stuck as held and turned the next single Shift into a drop.
-  press(side) {
+  press(side, chordMs = CHORD_MS) {
     if (this.paused) return;
     resumeAudio();
     const now = this.time.now, other = side === 'left' ? 'right' : 'left';
@@ -265,9 +309,9 @@ export default class GameScene extends Phaser.Scene {
     clearTimeout(this.capTimer?.[side]);
     this.capTimer = this.capTimer || {};
     this.capTimer[side] = setTimeout(() => this.release(side), 160);
-    if (now - this.lastDown[other] < CHORD_MS) {
+    if (now - this.lastDown[other] < chordMs) {
       // the first key of the chord already shifted the layer: undo that shift, then drop
-      if (this.undo && now - this.undo.t < CHORD_MS) { this.current = this.undo.row; this.stats.lost = this.undo.lost; this.drawGhost(0); }
+      if (this.undo && now - this.undo.t < chordMs) { this.current = this.undo.row; this.stats.lost = this.undo.lost; this.drawGhost(0); }
       this.undo = null;
       this.lastDown[other] = -1e9;
       this.drop();
@@ -356,9 +400,56 @@ export default class GameScene extends Phaser.Scene {
       const sec = Math.ceil(this.timeLeft / 0.25);
       if (this.timeLeft < 1 && sec !== this.lastTick) { this.lastTick = sec; SFX.tick(); }
       this.printer.led.setTint(k > 0.25 ? C.greenGlow : C.amber);
+      if (this.joltPending() && this.level.layerTime - this.timeLeft >= JOLT_AT) this.plateShift();
       if (this.timeLeft <= 0) this.printLayer();
     }
     this.printer.nozzleGlow.setAlpha(this.phase === 'printing' ? 0.9 : 0.25 + 0.05 * Math.sin(this.time.now / 300));
+  }
+
+  // ---------- plate shift ----------
+  joltPending() { return this.jolts.has(this.r) && this.joltedAt !== this.r && this.phase === 'align'; }
+
+  // The build plate slips k columns: the part printed so far moves with it, so the rest of the
+  // blueprint does too. The layer in the nozzle stays put: the player has to re-align it.
+  plateShift(k) {
+    this.joltedAt = this.r;
+    const cols = [];
+    this.target.forEach((row) => row.forEach((on, c) => on && cols.push(c)));
+    this.printed.forEach((row) => row?.forEach((cell, c) => cell?.kept && cols.push(c)));
+    const lo = Math.min(...cols), hi = Math.max(...cols);
+    const fits = (d) => lo + d >= 0 && hi + d <= COLS - 1;
+    if (k === undefined) {
+      const opts = [-2, -1, 1, 2].filter(fits);
+      if (!opts.length) return 0;
+      k = Phaser.Utils.Array.GetRandom(opts);
+    } else if (!fits(k)) return 0;
+
+    const move = (row, empty) => row.map((_, c) => row[c - k] ?? empty);
+    this.target = this.target.map((row) => move(row, false));
+    this.printed = this.printed.map((row) => (row ? move(row, null) : row));
+    this.bpCells = this.bpCells.map((row) => move(row, null));
+    this.plateOffset += k;
+    const dx = k * CW, ease = 'Back.easeOut', duration = 140;
+    this.printed.forEach((row) => row?.forEach((cell) => {
+      if (cell?.kept && cell.img.active) this.tweens.add({ targets: cell.img, x: cell.img.x + dx, duration, ease });
+    }));
+    this.tweens.add({ targets: this.messLayer, x: this.plateOffset * CW, duration, ease });
+    this.tweens.add({ targets: this.printer.pei, x: PX + this.plateOffset * CW, duration, ease });
+    this.bpCells.forEach((row) => row.forEach((img) => img && this.tweens.add({ targets: img, x: img.x + k * BP.cw, duration: 200, ease })));
+    this.drawGuide();
+
+    this.stats.jolts = (this.stats.jolts || 0) + 1;
+    this.timeLeft = Math.min(this.level.layerTime, this.timeLeft + JOLT_BONUS);
+    SFX.jolt();
+    shake(this, 0.014, 240);
+    glitch(this, 6);
+    this.flashLed(C.amber);
+    floatText(this, PX, BED_Y - 26, `PLATE SHIFT ${k < 0 ? '⟵' : '⟶'}`, hex(C.amber));
+    // the notice takes the hint's place on the blueprint for a moment
+    const note = txt(this, this.hintText.x, this.hintText.y, k < 0 ? `⟵  PLATE SLIPPED ${-k}  ·  FOLLOW THE PRINT` : `FOLLOW THE PRINT  ·  PLATE SLIPPED ${k}  ⟶`, 11, C.amber, { ox: 0.5, oy: 0.5, spacing: 1 });
+    this.hintText.setVisible(false);
+    this.tweens.add({ targets: note, alpha: 0, delay: 1300, duration: 300, onComplete: () => { note.destroy(); this.hintText.setVisible(true); } });
+    return k;
   }
 
   printLayer() {
@@ -456,6 +547,7 @@ export default class GameScene extends Phaser.Scene {
 
   // An unsupported cell sags off the nozzle and lands as a tangle of filament.
   spaghetti(img, r, c) {
+    const off = this.plateOffset * CW;   // messLayer moves with the plate: draw in its frame
     let landR = r - 1;
     while (landR >= 0 && !this.printed[landR]?.[c]?.kept) landR--;
     const landY = landR >= 0 ? rowY(landR) - 3 : BED_Y - 3;
@@ -465,7 +557,7 @@ export default class GameScene extends Phaser.Scene {
       onComplete: () => {
         img.destroy();
         const g = this.messLayer;
-        const x = colX(c) + CW / 2;
+        const x = colX(c) + CW / 2 - off;
         for (let k = 0; k < 3; k++) {
           g.lineStyle(2, k === 0 ? C.green : C.greenDark, 0.9);
           const curve = new Phaser.Curves.Spline([

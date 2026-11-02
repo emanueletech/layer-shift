@@ -141,6 +141,12 @@ export const SFX = {
   lose: () => tone({ type: 'sawtooth', freq: 400, freqEnd: 60, dur: 0.6, vol: 0.3 }),
   win: () => [523, 659, 784, 1046].forEach((f, i) => after(i * 90, () => tone({ type: 'triangle', freq: f, dur: 0.22, vol: 0.25 }))),
   star: (i) => { tone({ type: 'triangle', freq: 660 * Math.pow(1.26, i), dur: 0.3, vol: 0.22 }); tone({ type: 'sine', freq: 1320 * Math.pow(1.26, i), dur: 0.5, vol: 0.06 }); },
+  // the build plate slipping: a heavy thunk, a belt skipping teeth, a rattle
+  jolt: () => {
+    tone({ noise: true, dur: 0.22, vol: 0.5, filter: { type: 'lowpass', freq: 380 } });
+    tone({ type: 'square', freq: 95, freqEnd: 55, dur: 0.2, vol: 0.2, filter: { freq: 600 } });
+    [0, 40, 80, 120].forEach((t, i) => after(t, () => tone({ noise: true, dur: 0.025, vol: 0.18, filter: { type: 'bandpass', freq: 2200 - i * 300, q: 3 } })));
+  },
   rumble: (dur) => tone({ noise: true, dur, vol: 0.45, filter: { type: 'lowpass', freq: 220, freqEnd: 900 }, attack: 0.3 }),
 };
 

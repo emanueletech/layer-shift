@@ -34,7 +34,7 @@ export function buildPrinter(scene) {
   cone.fillRect(L + 10, T + 16, R - L - 20, B - T - 60);
   // bed carriage + PEI plate
   g.fillStyle(0x1f2736, 1).fillRoundedRect(PX - 190, BED_Y + 10, 380, 14, 4);
-  scene.add.image(PX, BED_Y + 6, 'pei').setDisplaySize(COLS * CW + 24, 12);
+  const pei = scene.add.image(PX, BED_Y + 6, 'pei').setDisplaySize(COLS * CW + 24, 12);
   // feet + brand plate
   g.fillStyle(C.frame, 1).fillRoundedRect(L + 20, B - 2, 40, 10, 3).fillRoundedRect(R - 60, B - 2, 40, 10, 3);
 
@@ -58,5 +58,5 @@ export function buildPrinter(scene) {
     gantry.setY(y - TIP_OFFSET + 18);
   };
   placeHead(PX, rowY(0));
-  return { g, led, gantry, head, nozzleGlow, placeHead };
+  return { g, led, pei, gantry, head, nozzleGlow, placeHead };
 }
