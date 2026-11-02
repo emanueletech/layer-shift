@@ -1,4 +1,4 @@
-// Plays the game headlessly: perfect play on job 1, sloppy play on job 2. Saves screenshots and fails on JS errors.
+// Plays all 8 jobs headlessly: clean play everywhere except a sloppy job 2. Saves screenshots and fails on JS errors.
 import { createRequire } from 'node:module';
 import http from 'node:http';
 import { readFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -37,55 +37,54 @@ const needed = () => page.evaluate(() => {
   if (!s || !s.sys.isActive() || s.phase !== 'align') return null;
   const cur = s.current, tgt = s.target[s.r];
   const fi = (a) => a.indexOf(true);
-  return { d: fi(tgt) - fi(cur), r: s.r };
+  return { d: fi(tgt) - fi(cur), r: s.r, job: s.levelIndex, jolt: s.joltPending(), plate: s.plateOffset };
 });
 const tap = async (code) => { await page.keyboard.down(code); await wait(30); await page.keyboard.up(code); await wait(40); };
+const chord = async () => {
+  await page.keyboard.down('ShiftLeft'); await page.keyboard.down('ShiftRight'); await wait(40);
+  await page.keyboard.up('ShiftLeft'); await page.keyboard.up('ShiftRight');
+};
+const resultsUp = () => page.evaluate(() => window.__game.scene.getScene('results').sys.isActive());
+let jolts = 0;
 
-async function playJob(sloppy) {
+async function playJob(sloppy, tag) {
   let lastR = -1;
-  for (let guard = 0; guard < 400; guard++) {
-    const scene = await page.evaluate(() => window.__gameState?.scene || (window.__game.scene.getScene('game').sys.isActive() ? 'game' : ''));
-    const n = await needed();
-    if (!n) {
-      const res = await page.evaluate(() => window.__game.scene.getScene('results').sys.isActive());
-      if (res) return;
-      await wait(60); continue;
-    }
+  for (let guard = 0; guard < 600; guard++) {
+    let n = await needed();
+    if (!n) { if (await resultsUp()) return; await wait(60); continue; }
     if (n.r === lastR) { await wait(60); continue; }
-    lastR = n.r;
+    // a plate shift is due on this layer: wait for it, like a player who reads the blueprint
+    while (n && n.jolt) { await wait(40); n = await needed(); }
+    if (!n) continue;
+    if (n.plate) jolts++;
     let d = n.d;
     if (sloppy && n.r % 3 === 1) d += 2;     // deliberately misalign some layers
     for (let i = 0; i < Math.abs(d); i++) await tap(d < 0 ? 'ShiftLeft' : 'ShiftRight');
-    if (n.r === 3 || n.r === 9) await shot((sloppy ? '04-job2-midprint' : '02-job-midprint') + '-' + n.r + '-' + Date.now() % 1000);
-    await page.keyboard.down('ShiftLeft'); await page.keyboard.down('ShiftRight');   // drop
-    await wait(40);
-    await page.keyboard.up('ShiftLeft'); await page.keyboard.up('ShiftRight');
+    if (n.r === 4) await shot(`${tag}-midprint`);
+    lastR = n.r;
+    await wait(150);   // a tap right before the chord would count as half of it
+    await chord();
     await wait(100);
   }
   throw new Error('job did not finish');
 }
 
-
-await playJob(false);
-await wait(2600);
-await shot('03-results-job1');
-const r1 = await page.evaluate(() => window.__gameState);
-await page.keyboard.down('ShiftLeft'); await page.keyboard.down('ShiftRight'); await wait(50);
-await page.keyboard.up('ShiftLeft'); await page.keyboard.up('ShiftRight');
-await wait(900);
-await playJob(true);
-await wait(2600);
-await shot('05-results-job2');
-const r2 = await page.evaluate(() => window.__gameState);
-await page.keyboard.down('ShiftLeft'); await page.keyboard.down('ShiftRight'); await wait(50);
-await page.keyboard.up('ShiftLeft'); await page.keyboard.up('ShiftRight');
-await wait(900);
-await playJob(false);
-await wait(2600);
-await shot('06-results-job3'); await wait(1500); await shot('07-liftoff');
-const r3 = await page.evaluate(() => window.__gameState);
-console.log('job3', JSON.stringify(r3));
+const results = [];
+const JOBS = await page.evaluate(() => window.__game.scene.getScene('game').sys.settings && 8);
+for (let job = 0; job < JOBS; job++) {
+  const tag = `j${job + 1}`;
+  await playJob(job === 1, tag);
+  await wait(2600);
+  await shot(`${tag}-results`);
+  results.push(await page.evaluate(() => window.__gameState));
+  if (job === JOBS - 1) { await wait(1500); await shot('liftoff'); break; }
+  await chord();
+  await wait(900);
+}
 await browser.close(); server.close();
-console.log('job1', JSON.stringify(r1), 'job2', JSON.stringify(r2));
+results.forEach((r, i) => console.log(`job${i + 1}`, JSON.stringify(r)));
+const perfectJobs = results.filter((r, i) => i !== 1 && r.stars === 3).length;
+console.log('plate-shifted layers seen:', jolts, '· 3-star jobs (clean bot):', perfectJobs, '/', JOBS - 1);
 if (errors.length) { console.error('ERRORS:\n' + errors.join('\n')); process.exit(1); }
+if (perfectJobs !== JOBS - 1) { console.error('the clean bot should 3-star every job'); process.exit(1); }
 console.log('PLAY OK');

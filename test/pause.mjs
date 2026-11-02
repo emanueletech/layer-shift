@@ -38,7 +38,8 @@ await wait(300);
 const c = await game();
 await page.keyboard.press('KeyP'); await wait(150);
 await page.keyboard.press('KeyR');
-await ready();
+// ready() alone would match the old scene before the restart fade ends: wait for layer 1 again
+await page.waitForFunction(() => { const s = window.__game.scene.getScene('game'); return s.sys.isActive() && s.phase === 'align' && s.r === 0; }, null, { timeout: 20000 });
 const d = await game();
 await browser.close(); server.close();
 console.log(JSON.stringify({ a, b, c, d }));

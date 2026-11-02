@@ -4,10 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node test/smoke.mjs && node test/stuck-shift.mjs && node test/pause.mjs",
+    "test": "node test/levels.mjs && node test/smoke.mjs && node test/stuck-shift.mjs && node test/pause.mjs && node test/touch.mjs",
     "build": "node build.mjs",
     "play": "node test/play.mjs",
-    "single": "node build-single.mjs"
+    "single": "node build-single.mjs",
+    "media": "node test/capture.mjs"
   },
   "keywords": [],
   "author": "",
